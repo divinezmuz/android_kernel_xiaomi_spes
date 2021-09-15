@@ -737,7 +737,7 @@ static int nopmi_usb_set_prop(struct power_supply *psy,
 				(NOPMI_CHARGER_IC_SC == nopmi_get_charger_ic_type())) {
 			if (g_nopmi_chg->usb_online) {
 				pr_info("%s: Acquire wakelock\n", __func__);
-				pm_stay_awake(g_nopmi_chg->dev);
+					pm_wakeup_event(g_nopmi_chg->dev, 500);
 				start_nopmi_chg_workfunc();
 			} else {
 				stop_nopmi_chg_workfunc();
