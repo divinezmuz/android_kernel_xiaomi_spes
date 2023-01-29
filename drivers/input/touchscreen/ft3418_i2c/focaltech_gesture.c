@@ -301,14 +301,9 @@ static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
 		gesture = -1;
 		break;
 	}
+
 	/* report event key */
-	if ((gesture == KEY_GESTURE_AOD) && fts_data->aod_changed) {
-		FTS_DEBUG("Gesture Code=%d", gesture);
-		input_report_key(input_dev, gesture, 1);
-		input_sync(input_dev);
-		input_report_key(input_dev, gesture, 0);
-		input_sync(input_dev);
-	} else if ((gesture == KEY_GESTURE_U) && fts_data->gesture_mode) {
+        if (gesture != 1) {
 		FTS_DEBUG("Gesture Code=%d", gesture);
 		input_report_key(input_dev, gesture, 1);
 		input_sync(input_dev);
