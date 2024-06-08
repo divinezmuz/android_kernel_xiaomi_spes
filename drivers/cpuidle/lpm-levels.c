@@ -40,6 +40,9 @@
 #include "lpm-levels.h"
 #include <trace/events/power.h>
 #include "../clk/clk.h"
+#ifdef CONFIG_DRM_PANEL
+#include <drm/drm_panel.h>
+#endif
 #define CREATE_TRACE_POINTS
 #include <trace/events/trace_msm_low_power.h>
 
@@ -94,8 +97,44 @@ static void cluster_prepare(struct lpm_cluster *cluster,
 static bool print_parsed_dt;
 module_param_named(print_parsed_dt, print_parsed_dt, bool, 0664);
 
+#ifdef CONFIG_DRM
+static bool sleep_disabled = true;
+module_param_named(sleep_disabled, sleep_disabled, bool, 0444);
+
+static int lpm_drm_notify(struct notifier_block *nb,
+                        unsigned long val, void *data)
+{
+    struct drm_notify_data *evdata = data;
+    unsigned int blank;
+
+    if (val != DRM_EVENT_BLANK || !evdata || !evdata->data)
+        return 0;
+
+    blank = *(int *)(evdata->data);
+    switch (blank) {
+        case DRM_BLANK_UNBLANK:
+            sleep_disabled = true;
+            wake_up_all_idle_cpus();
+            break;
+        case DRM_BLANK_POWERDOWN:
+        case DRM_BLANK_LP1:
+        case DRM_BLANK_LP2:
+            sleep_disabled = false;
+            wake_up_all_idle_cpus();
+            break;
+        default:
+            break;
+    }
+    return NOTIFY_OK;
+}
+
+static struct notifier_block lpm_drm_notifier = {
+    .notifier_call = lpm_drm_notify,
+};
+#else
 static bool sleep_disabled;
 module_param_named(sleep_disabled, sleep_disabled, bool, 0664);
+#endif
 
 /**
  * msm_cpuidle_get_deep_idle_latency - Get deep idle latency value
@@ -1704,6 +1743,13 @@ static int lpm_probe(struct platform_device *pdev)
 	unsigned int cpu;
 	struct hrtimer *cpu_histtimer;
 	struct kobject *module_kobj = NULL;
+	#ifdef CONFIG_DRM
+	ret = drm_register_client(&lpm_drm_notifier);
+	if (ret)
+		pr_err("Failed to register DRM notifier, ret=%d\n", ret);
+	else
+		pr_info("Registered DRM notifier for LPM\n");
+	#endif
 
 	get_online_cpus();
 	lpm_root_node = lpm_of_parse_cluster(pdev);
