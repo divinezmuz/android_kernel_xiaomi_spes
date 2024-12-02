@@ -5008,6 +5008,7 @@ static void set_delayed(struct sched_entity *se)
 	for_each_sched_entity(se) {
 		struct cfs_rq *cfs_rq = cfs_rq_of(se);
 
+		cfs_rq->h_nr_runnable--;
 		cfs_rq->h_nr_delayed++;
 		if (cfs_rq_throttled(cfs_rq))
 			break;
@@ -5030,6 +5031,7 @@ static void clear_delayed(struct sched_entity *se)
 	for_each_sched_entity(se) {
 		struct cfs_rq *cfs_rq = cfs_rq_of(se);
 
+		cfs_rq->h_nr_runnable++;
 		cfs_rq->h_nr_delayed--;
 		if (cfs_rq_throttled(cfs_rq))
 			break;
@@ -5458,7 +5460,11 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 	struct rq *rq = rq_of(cfs_rq);
 	struct cfs_bandwidth *cfs_b = tg_cfs_bandwidth(cfs_rq->tg);
 	struct sched_entity *se;
-	long queued_delta, idle_task_delta, delayed_delta, dequeue = 1;
+	long queued_delta, runnable_delta, idle_task_delta, delayed_delta, dequeue = 1;
+=======
+	long queued_delta, runnable_delta, idle_task_delta, delayed_delta, dequeue = 1;
+	long rq_h_nr_queued = rq->cfs.h_nr_queued;
+>>>>>>> c2a295bffeaf94 (sched/fair: Add new cfs_rq.h_nr_runnable)
 
 	raw_spin_lock(&cfs_b->lock);
 	/* This will start the period timer if necessary */
@@ -5489,6 +5495,7 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 	rcu_read_unlock();
 
 	queued_delta = cfs_rq->h_nr_queued;
+	runnable_delta = cfs_rq->h_nr_runnable;
 	idle_task_delta = cfs_rq->idle_h_nr_running;
 	delayed_delta = cfs_rq->h_nr_delayed;
 	for_each_sched_entity(se) {
@@ -5511,6 +5518,8 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 
 		qcfs_rq->h_nr_queued -= queued_delta;
                 qcfs_rq->idle_h_nr_running -= idle_task_delta;
+		qcfs_rq->h_nr_runnable -= runnable_delta;
+		qcfs_rq->h_nr_delayed -= delayed_delta;
 
 		if (qcfs_rq->load.weight) {
 			/* Avoid re-evaluating load for this entity: */
@@ -5529,6 +5538,7 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 		se_update_runnable(se);
 
 		qcfs_rq->h_nr_queued -= queued_delta;
+		qcfs_rq->h_nr_runnable -= runnable_delta;
 		qcfs_rq->idle_h_nr_running -= idle_task_delta;
 		qcfs_rq->h_nr_delayed -= delayed_delta;
 	}
@@ -5551,7 +5561,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 	struct rq *rq = rq_of(cfs_rq);
 	struct cfs_bandwidth *cfs_b = tg_cfs_bandwidth(cfs_rq->tg);
 	struct sched_entity *se;
-	long queued_delta, idle_task_delta, delayed_delta;
+	long queued_delta, runnable_delta, idle_task_delta, delayed_delta;
 
 	se = cfs_rq->tg->se[cpu_of(rq)];
 
@@ -5582,6 +5592,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 	}
 
 	queued_delta = cfs_rq->h_nr_queued;
+	runnable_delta = cfs_rq->h_nr_runnable;
 	idle_task_delta = cfs_rq->idle_h_nr_running;
 	delayed_delta = cfs_rq->h_nr_delayed;
 	for_each_sched_entity(se) {
@@ -5598,6 +5609,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 		enqueue_entity(cfs_rq, se, ENQUEUE_WAKEUP);
 
 		cfs_rq->h_nr_queued += queued_delta;
+		cfs_rq->h_nr_runnable += runnable_delta;
 		cfs_rq->idle_h_nr_running += idle_task_delta;
 		cfs_rq->h_nr_delayed += delayed_delta;
 
@@ -5613,6 +5625,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 		se_update_runnable(se);
 
 		cfs_rq->h_nr_queued += queued_delta;
+                cfs_rq->h_nr_runnable += runnable_delta;
 		cfs_rq->idle_h_nr_running += idle_task_delta;
 		cfs_rq->h_nr_delayed += delayed_delta;
 
@@ -6335,6 +6348,8 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		enqueue_entity(cfs_rq, se, flags);
 		slice = cfs_rq_min_slice(cfs_rq);
 
+		if (!h_nr_delayed)
+			cfs_rq->h_nr_runnable++;
 		cfs_rq->h_nr_queued++;
 		cfs_rq->idle_h_nr_running += idle_h_nr_running;
 		cfs_rq->h_nr_delayed += h_nr_delayed;
@@ -6358,6 +6373,8 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 			min_vruntime_cb_propagate(&se->run_node, NULL);
 		slice = cfs_rq_min_slice(cfs_rq);
 
+		if (!h_nr_delayed)
+			cfs_rq->h_nr_runnable++;
 		cfs_rq->h_nr_queued++;
 		cfs_rq->idle_h_nr_running += idle_h_nr_running;
 		cfs_rq->h_nr_delayed += h_nr_delayed;
@@ -6435,6 +6452,8 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 			break;
 		}
 
+		if (!h_nr_delayed)
+			cfs_rq->h_nr_runnable -= h_nr_queued;
 		cfs_rq->h_nr_queued -= h_nr_queued;
 		cfs_rq->idle_h_nr_running -= idle_h_nr_running;
 		cfs_rq->h_nr_delayed -= h_nr_delayed;
@@ -6473,6 +6492,8 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 			min_vruntime_cb_propagate(&se->run_node, NULL);
 		slice = cfs_rq_min_slice(cfs_rq);
 
+		if (!h_nr_delayed)
+			cfs_rq->h_nr_runnable -= h_nr_queued;
 		cfs_rq->h_nr_queued -= h_nr_queued;
 		cfs_rq->idle_h_nr_running -= idle_h_nr_running;
 		cfs_rq->h_nr_delayed -= h_nr_delayed;
