@@ -37,14 +37,15 @@ int set_prop_battery_charging_enabled(struct votable *usb_icl_votable,
 				      const union power_supply_propval *val)
 {
 	int icl = MAIN_ICL_MIN;
+	int ret = 0;
 
 	if (val->intval == 0) {
-		vote(usb_icl_votable, MAIN_CHG_SUSPEND_VOTER, true, icl);
+		ret = vote(usb_icl_votable, MAIN_CHG_SUSPEND_VOTER, true, icl);
 	} else {
-		vote(usb_icl_votable, MAIN_CHG_SUSPEND_VOTER, false, 0);
+		ret = vote(usb_icl_votable, MAIN_CHG_SUSPEND_VOTER, false, 0);
 	}
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(get_prop_battery_charging_enabled);
 EXPORT_SYMBOL_GPL(set_prop_battery_charging_enabled);

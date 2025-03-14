@@ -2496,13 +2496,13 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	if (irqn < 0) {
 		pr_err("%s: %d gpio_to_irq failed\n", __func__, irqn);
 		ret = irqn;
-		goto err_free;
+		goto err_gpio;
 	}
 	client->irq = irqn;
 
 	ret = bq2589x_psy_register(bq);
 	if (ret)
-		goto err_free;
+		goto err_gpio;
 
 	INIT_WORK(&bq->irq_work, bq2589x_charger_irq_workfunc);
 	INIT_WORK(&bq->adapter_in_work, bq2589x_adapter_in_workfunc);
@@ -2558,24 +2558,18 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	vote(bq->usb_icl_votable, PROFILE_CHG_VOTER, true, CHG_ICL_CURR_MAX);
 	vote(bq->chg_dis_votable, "BMS_FC_VOTER", false, 0);
 
-	ret = sysfs_create_group(&bq->dev->kobj, &bq2589x_attr_group);
-	if (ret) {
-		pr_err("failed to register sysfs. err: %d\n", ret);
-		goto err_irq;
-	}
-
 //modify by HTH-209427/HTH-209841 at 2022/05/12 begin
-	pe.enable = false;//PE adjuested to the front of the interrupt
+	pe.enable = false; //PE adjuested to the front of the interrupt
 //modify by HTH-209427/HTH-209841 at 2022/05/12 end
 	ret = request_irq(client->irq, bq2589x_charger_interrupt, IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "bq2589x_charger1_irq", bq);
 	if (ret) {
 		pr_err("%s: Request IRQ %d failed: %d\n", __func__, client->irq, ret);
-		goto err_irq;
+		goto err_work;
 	} else {
 		bq_dbg(PR_OEM, "%s: irq=%d\n", __func__, client->irq);
 	}
-
 	//schedule_work(&bq->irq_work); // 2020.09.15 change for zsa in case of adapter has been in when power off
+	enable_irq_wake(irqn);
 
 #if defined(CONFIG_TCPC_RT1711H)
 	bq->pd_nb.notifier_call = pd_tcp_notifier_call;
@@ -2587,16 +2581,26 @@ static int bq2589x_charger_probe(struct i2c_client *client,
 	}
 #endif
 
-	enable_irq_wake(irqn);
-	schedule_delayed_work(&bq->time_delay_work, msecs_to_jiffies(4000));
+	ret = sysfs_create_group(&bq->dev->kobj, &bq2589x_attr_group);
+	if (ret) {
+		pr_err("failed to register sysfs. err: %d\n", ret);
+		goto err_sysfs;
+	}
 
+	schedule_delayed_work(&bq->time_delay_work, msecs_to_jiffies(4000));
 	pr_info("probe done\n");
 	return 0;
 
+err_sysfs:
 #if defined(CONFIG_TCPC_RT1711H)
+	unregister_tcp_dev_notifier(bq->tcpc_dev, &bq->pd_nb, TCP_NOTIFY_TYPE_ALL);
 err_get_tcpc_dev:
 #endif
-err_irq:
+	if (bq->client->irq > 0) {
+		disable_irq_wake(irqn);
+		free_irq(bq->client->irq, bq);
+	}
+err_work:
 	cancel_work_sync(&bq->irq_work);
 	cancel_work_sync(&bq->adapter_in_work);
 	cancel_work_sync(&bq->adapter_out_work);
@@ -2630,14 +2634,17 @@ destroy_votable:
 		destroy_votable(bq->chgctrl_votable);
 		bq->chgctrl_votable = NULL;
 	}*/
+err_gpio:
+	if (bq->irq_gpio)
+		gpio_free(bq->irq_gpio);
 err_free:
 	power_supply_put(bq->batt_psy);
 	power_supply_put(bq->bms_psy);
+	g_bq = NULL;
 err_dev:
 	mutex_destroy(&bq->i2c_rw_lock);
 	mutex_destroy(&bq->usb_switch_lock);
-	g_bq = NULL;
-	devm_kfree(&client->dev, bq);
+	//devm_kfree(&client->dev, bq);
 	pr_err("probe fail\n");
 	return ret;
 }
@@ -2646,14 +2653,20 @@ static void bq2589x_charger_shutdown(struct i2c_client *client)
 {
 	struct bq2589x *bq = i2c_get_clientdata(client);
 
-	bq2589x_disable_otg(bq);
+	if (!bq)
+		return;
 
+	bq2589x_disable_otg(bq);
 	bq2589x_exit_hiz_mode(bq);
 	bq2589x_adc_stop(bq);
 	bq2589x_psy_unregister(bq);
 	msleep(2);
 
-	sysfs_remove_group(&bq->dev->kobj, &bq2589x_attr_group);
+	if (bq->client->irq > 0) {
+		//disable_irq(bq->client->irq);
+		disable_irq_wake(bq->client->irq);
+		free_irq(bq->client->irq, bq);
+	}
 	cancel_work_sync(&bq->irq_work);
 	cancel_work_sync(&bq->adapter_in_work);
 	cancel_work_sync(&bq->adapter_out_work);
@@ -2666,19 +2679,15 @@ static void bq2589x_charger_shutdown(struct i2c_client *client)
 	cancel_delayed_work_sync(&bq->pe_volt_tune_work);
 	cancel_delayed_work_sync(&bq->time_delay_work);
 	//cancel_delayed_work_sync(&bq->period_work);
-	if (bq->client->irq) {
-		disable_irq(bq->client->irq);
-		free_irq(bq->client->irq, bq);
-		gpio_free(bq->irq_gpio);
-	}
-	g_bq = NULL;
+	sysfs_remove_group(&bq->dev->kobj, &bq2589x_attr_group);
+	/*if (bq->irq_gpio)
+		gpio_free(bq->irq_gpio);*/
 }
 
 static struct of_device_id bq2589x_charger_match_table[] = {
 	{.compatible = "ti,bq2589x-1",},
 	{},
 };
-
 
 static const struct i2c_device_id bq2589x_charger_id[] = {
 	{"bq2589x-1", BQ25890},

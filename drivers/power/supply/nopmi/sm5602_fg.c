@@ -3478,14 +3478,14 @@ static int sm_fg_probe(struct i2c_client *client, const struct i2c_device_id *id
 		pr_info("unuse\n");
 	} else {
 		pr_err("Failed to registe gpio interrupt\n");
-		goto err_free;
+		goto err_psy;
 	}
 
 	if (client->irq) {
 		ret = devm_request_threaded_irq(&client->dev, client->irq, NULL, fg_irq_thread, IRQF_TRIGGER_LOW | IRQF_ONESHOT, "sm fuel gauge irq", sm);
 		if (ret < 0) {
 			pr_err("request irq for irq=%d failed, ret=%d\n", client->irq, ret);
-			//goto err_1;
+			//goto err_psy;
 		}
 	}
 	//fg_irq_thread(client->irq, sm); // if IRQF_TRIGGER_FALLING or IRQF_TRIGGER_RISING is needed, enable initial irq.
@@ -3495,16 +3495,17 @@ static int sm_fg_probe(struct i2c_client *client, const struct i2c_device_id *id
 	ret = power_supply_reg_notifier(&sm->nb);
 	if (ret < 0) {
 		pr_err("Couldn't register psy notifier rc=%d\n", ret);
-		return ret;
+		goto err_psy;
 	}
 
-	create_debugfs_entry(sm);
-
 	ret = sysfs_create_group(&sm->dev->kobj, &fg_attr_group);
-	if (ret)
+	if (ret) {
 		pr_err("Failed to register sysfs: %d\n", ret);
+		goto err_notifer;
+	}
 
 	//fg_dump_debug(sm);
+	create_debugfs_entry(sm);
 
 	schedule_delayed_work(&sm->monitor_work, 10 * HZ);
 	//schedule_delayed_work(&sm->soc_monitor_work, msecs_to_jiffies(MONITOR_SOC_WAIT_MS));
@@ -3514,12 +3515,15 @@ static int sm_fg_probe(struct i2c_client *client, const struct i2c_device_id *id
 
 	return 0;
 
-//err_1:
-//	fg_psy_unregister(sm);
+err_notifer:
+	power_supply_unreg_notifier(&sm->nb);
+err_psy:
+	fg_psy_unregister(sm);
 err_free:
 	mutex_destroy(&sm->data_lock);
 	mutex_destroy(&sm->i2c_rw_lock);
-	devm_kfree(&client->dev,sm);
+	i2c_set_clientdata(client, NULL);
+	//devm_kfree(&client->dev, sm);
 	pr_err("sm fuel gauge probe fail!\n");
 	return ret;
 }
@@ -3528,18 +3532,19 @@ static int sm_fg_remove(struct i2c_client *client)
 {
 	struct sm_fg_chip *sm = i2c_get_clientdata(client);
 
-	cancel_delayed_work_sync(&sm->monitor_work);
 	cancel_delayed_work_sync(&sm->LowBatteryCheckWork);
+	cancel_delayed_work_sync(&sm->monitor_work);
 	//cancel_delayed_work_sync(&sm->soc_monitor_work);
 
+	power_supply_unreg_notifier(&sm->nb);
 	fg_psy_unregister(sm);
 
 	mutex_destroy(&sm->data_lock);
 	mutex_destroy(&sm->i2c_rw_lock);
 
-	debugfs_remove_recursive(sm->debug_root);
-
 	sysfs_remove_group(&sm->dev->kobj, &fg_attr_group);
+	debugfs_remove_recursive(sm->debug_root);
+	i2c_set_clientdata(client, NULL);
 
 	return 0;
 }
