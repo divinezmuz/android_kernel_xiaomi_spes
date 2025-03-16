@@ -296,29 +296,37 @@ struct sc8551 {
 static int __sc8551_read_byte(struct sc8551 *sc, u8 reg, u8 *data)
 {
 	s32 ret;
+	int cnt = 3;
 
-	ret = i2c_smbus_read_byte_data(sc->client, reg);
-	if (ret < 0) {
-		sc_err("i2c read fail: can't read from reg 0x%02X\n", reg);
-		return ret;
+	while (cnt--) {
+		ret = i2c_smbus_read_byte_data(sc->client, reg);
+		if (ret >= 0) {
+			*data = (u8)ret;
+			return 0;
+		}
+
+		sc_err("i2c read fail: can't read from reg 0x%02X, retrying...\n", reg);
+		usleep_range(200, 300);
 	}
 
-	*data = (u8)ret;
-
-	return 0;
+	return ret;
 }
 
 static int __sc8551_write_byte(struct sc8551 *sc, int reg, u8 val)
 {
 	s32 ret;
+	int cnt = 3;
 
-	ret = i2c_smbus_write_byte_data(sc->client, reg, val);
-	if (ret < 0) {
-		sc_err("i2c write fail: can't write 0x%02X to reg 0x%02X: %d\n", val, reg, ret);
-		return ret;
+	while (cnt--) {
+		ret = i2c_smbus_write_byte_data(sc->client, reg, val);
+		if (ret >= 0)
+			return 0;
+
+		sc_err("i2c write fail: can't write 0x%02X to reg 0x%02X: %d, retrying...\n", val, reg, ret);
+		usleep_range(200, 300);
 	}
 
-	return 0;
+	return ret;
 }
 
 static int sc8551_read_byte(struct sc8551 *sc, u8 reg, u8 *data)

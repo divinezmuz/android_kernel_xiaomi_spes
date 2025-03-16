@@ -335,28 +335,37 @@ static void fg_monitor_workfunc(struct work_struct *work);
 static int __fg_read_word(struct i2c_client *client, u8 reg, u16 *val)
 {
 	s32 ret;
+	int cnt = 3;
 
-	ret = i2c_smbus_read_word_data(client, reg);
-	if (ret < 0) {
-		pr_err("i2c read word fail: can't read from reg 0x%02X\n", reg);
-		return ret;
+	while (cnt--) {
+		ret = i2c_smbus_read_word_data(client, reg);
+		if (ret >= 0) {
+			*val = (u16)ret;
+			return 0;
+		}
+
+		pr_err("i2c read word fail: can't read from reg 0x%02X, retrying...\n", reg);
+		usleep_range(200, 300);
 	}
-	*val = (u16)ret;
 
-	return 0;
+	return ret;
 }
 
 static int __fg_write_word(struct i2c_client *client, u8 reg, u16 val)
 {
 	s32 ret;
+	int cnt = 3;
 
-	ret = i2c_smbus_write_word_data(client, reg, val);
-	if (ret < 0) {
-		pr_err("i2c write word fail: can't write 0x%02X to reg 0x%02X\n", val, reg);
-		return ret;
+	while (cnt--) {
+		ret = i2c_smbus_write_word_data(client, reg, val);
+		if (ret >= 0)
+			return 0;
+
+		pr_err("i2c write word fail: can't write 0x%04X to reg 0x%02X, retrying...\n", val, reg);
+		usleep_range(200, 300);
 	}
 
-	return 0;
+	return ret;
 }
 
 static int fg_read_word(struct sm_fg_chip *sm, u8 reg, u16 *val)
