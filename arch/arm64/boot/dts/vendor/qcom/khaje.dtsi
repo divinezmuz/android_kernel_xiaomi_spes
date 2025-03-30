@@ -3926,32 +3926,32 @@ tpdm_turing_llm: tpdm@8861000 {
 
 		opp-1114800000 {
 			opp-hz = /bits/ 64 <1114800000>;
-			opp-microvolt = <RPMH_REGULATOR_LEVEL_TURBO_L1>;
+			opp-microvolt = <RPMH_REGULATOR_LEVEL_TURBO>;
 		};
 
 		opp-1025000000 {
 			opp-hz = /bits/ 64 <1025000000>;
-			opp-microvolt = <RPMH_REGULATOR_LEVEL_TURBO>;
+			opp-microvolt = <RPMH_REGULATOR_LEVEL_NOM>;
 		};
 
 		opp-785000000 {
 			opp-hz = /bits/ 64 <785000000>;
-			opp-microvolt = <RPMH_REGULATOR_LEVEL_NOM>;
+			opp-microvolt = <RPMH_REGULATOR_LEVEL_SVS_L1>;
 		};
 
 		opp-600000000 {
 			opp-hz = /bits/ 64 <600000000>;
-			opp-microvolt = <RPMH_REGULATOR_LEVEL_SVS_L1>;
+			opp-microvolt = <RPMH_REGULATOR_LEVEL_SVS>;
 		};
 
 		opp-465000000 {
 			opp-hz = /bits/ 64 <465000000>;
-			opp-microvolt = <RPMH_REGULATOR_LEVEL_SVS>;
+			opp-microvolt = <RPMH_REGULATOR_LEVEL_LOW_SVS>;
 		};
 
 		opp-320000000 {
 			opp-hz = /bits/ 64 <320000000>;
-			opp-microvolt = <RPMH_REGULATOR_LEVEL_LOW_SVS>;
+			opp-microvolt = <RPMH_REGULATOR_LEVEL_MIN_SVS>;
 		};
 	};
 };
@@ -4074,7 +4074,7 @@ tpdm_turing_llm: tpdm@8861000 {
 			qcom,initial-pwrlevel = <5>;
 			qcom,ca-target-pwrlevel = <4>;
 
-			/* TURBO_L1 */
+			/* TURBO */
 			qcom,gpu-pwrlevel@0 {
 				reg = <0>;
 				qcom,gpu-freq = <1114800000>;
@@ -4083,7 +4083,7 @@ tpdm_turing_llm: tpdm@8861000 {
 				qcom,bus-max = <7>;
 			};
 
-			/* TURBO */
+			/* NOM */
 			qcom,gpu-pwrlevel@1 {
 				reg = <1>;
 				qcom,gpu-freq = <1025000000>;
@@ -4092,7 +4092,7 @@ tpdm_turing_llm: tpdm@8861000 {
 				qcom,bus-max = <7>;
 			};
 
-			/* NOM */
+			/* SVS_L1 */
 			qcom,gpu-pwrlevel@2 {
 				reg = <2>;
 				qcom,gpu-freq = <785000000>;
@@ -4101,7 +4101,7 @@ tpdm_turing_llm: tpdm@8861000 {
 				qcom,bus-max = <5>;
 			};
 
-			/* SVS_L1 */
+			/* SVS */
 			qcom,gpu-pwrlevel@3 {
 				reg = <3>;
 				qcom,gpu-freq = <600000000>;
@@ -4110,7 +4110,7 @@ tpdm_turing_llm: tpdm@8861000 {
 				qcom,bus-max = <5>;
 			};
 
-			/* SVS */
+			/* LOW SVS */
 			qcom,gpu-pwrlevel@4 {
 				reg = <4>;
 				qcom,gpu-freq = <465000000>;
@@ -4119,7 +4119,7 @@ tpdm_turing_llm: tpdm@8861000 {
 				qcom,bus-max = <4>;
 			};
 
-			/* LOW SVS */
+			/* MIN SVS */
 			qcom,gpu-pwrlevel@5 {
 				reg = <5>;
 				qcom,gpu-freq = <320000000>;
