@@ -137,3 +137,10 @@ kernel/configs/android-*.cfg
 
 # Ignore shell scripts on root dir
 /*.sh
+
+# Additional ignore patterns
+/out/
+/KernelSU/
+/KernelSU-Next/
+/susfs4ksu/
+*.log
