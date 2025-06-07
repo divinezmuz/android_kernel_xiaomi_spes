@@ -4393,7 +4393,7 @@ retry:
 
 		/* retry pages that may have missed rotate_reclaimable_page() */
 		list_move(&page->lru, &clean);
-		sc->nr_scanned -= thp_nr_pages(page);
+		sc->nr_scanned -= compound_nr(page);
 	}
 
 	spin_lock_irq(&pgdat->lru_lock);
