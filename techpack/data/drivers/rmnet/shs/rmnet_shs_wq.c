@@ -1225,23 +1225,41 @@ int rmnet_shs_wq_check_cpu_move_for_ep(u16 current_cpu, u16 dest_cpu,
 
 	cpu_in_rps_mask = (1 << dest_cpu) & ep->rps_config_msk;
 
-	rm_err("SHS_MASK:  cur cpu [%d] | dest_cpu [%d] | "
-	       "cpu isolation_mask = 0x%x | ep_rps_mask = 0x%x | "
-	       "cpu_online(dest) = %d cpu_in_rps_mask = %d | "
-	       "cpu isolated(dest) = %d",
-	       current_cpu, dest_cpu, __cpu_isolated_mask, ep->rps_config_msk,
-	       cpu_online(dest_cpu), cpu_in_rps_mask, cpu_isolated(dest_cpu));
+#ifdef CONFIG_SCHED_WALT
+        rm_err("SHS_MASK:  cur cpu [%d] | dest_cpu [%d] | "
+               "cpu isolation_mask = 0x%x | ep_rps_mask = 0x%x | "
+               "cpu_online(dest) = %d cpu_in_rps_mask = %d | "
+               "cpu isolated(dest) = %d",
+               current_cpu, dest_cpu, __cpu_isolated_mask, ep->rps_config_msk,
+               cpu_online(dest_cpu), cpu_in_rps_mask, cpu_isolated(dest_cpu));
+#else
+        rm_err("SHS_MASK:  cur cpu [%d] | dest_cpu [%d] | "
+               "ep_rps_mask = 0x%x | cpu_online(dest) = %d | "
+               "cpu_in_rps_mask = %d",
+               current_cpu, dest_cpu, ep->rps_config_msk,
+               cpu_online(dest_cpu), cpu_in_rps_mask);
+#endif
 
-	/* We cannot move to dest cpu if the cur cpu is the same,
-	 * the dest cpu is offline, dest cpu is not in the rps mask,
-	 * or if the dest cpu is isolated
-	 */
-	if (current_cpu == dest_cpu || !cpu_online(dest_cpu) ||
-	    !cpu_in_rps_mask || cpu_isolated(dest_cpu)) {
-		return 0;
-	}
+#ifdef CONFIG_SCHED_WALT
+        /* We cannot move to dest cpu if the cur cpu is the same,
+         * the dest cpu is offline, dest cpu is not in the rps mask,
+         * or if the dest cpu is isolated
+         */
+        if (current_cpu == dest_cpu || !cpu_online(dest_cpu) ||
+            !cpu_in_rps_mask || cpu_isolated(dest_cpu)) {
+                return 0;
+        }
+#else
+        /* We cannot move to dest cpu if the cur cpu is the same,
+         * the dest cpu is offline, or dest cpu is not in the rps mask
+         */
+        if (current_cpu == dest_cpu || !cpu_online(dest_cpu) ||
+            !cpu_in_rps_mask) {
+                return 0;
+        }
+#endif
 
-	return 1;
+      return 1;
 }
 
 /* rmnet_shs_wq_try_to_move_flow - try to make a flow suggestion
