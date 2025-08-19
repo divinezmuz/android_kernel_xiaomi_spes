@@ -247,6 +247,7 @@ static void do_idle(void)
 		}
 
 		arch_cpu_idle_enter();
+		rcu_nocb_flush_deferred_wakeup();
 
 		/*
 		 * In poll mode we reenable interrupts and spin. Also if we
@@ -286,7 +287,6 @@ static void do_idle(void)
 	 * critical section.
 	 */
 	flush_smp_call_function_from_idle();
-	sched_ttwu_pending();
 	schedule_idle();
 
 	if (unlikely(klp_patch_pending(current)))
