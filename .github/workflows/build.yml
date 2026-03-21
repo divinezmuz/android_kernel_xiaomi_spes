@@ -1,0 +1,25 @@
+name: Build kernel
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Build kernel
+        uses: divinezmuz/kernel_build_action@main
+        with:
+          kernel-url: https://github.com/divinezmuz/android_kernel_xiaomi_spes.git
+          kernel-branch: urumi
+          config: vendor/bengal-perf_defconfig vendor/xiaomi/spes.config
+          arch: arm64
+          aosp-gcc: true
+          aosp-clang: true
+          aosp-clang-version: r547379
+          anykernel3: true
+          anykernel3-url: https://github.com/divinezmuz/AnyKernel3
+          extra-make-args: '["KCFLAGS=-Wno-error -Wno-error=implicit-function-declaration", "CONFIG_CC_WERROR=n"]'
+
