@@ -1,0 +1,89 @@
+name: Build KSU Kernel
+
+on:
+  workflow_dispatch:
+
+env:
+  KERNEL_URL: https://github.com/divinezmuz/android_kernel_xiaomi_spes.git
+  KERNEL_BRANCH: asano-spes
+  ANYKERNEL3_URL: https://github.com/divinezmuz/AnyKernel3
+  CONFIGS: vendor/bengal-perf_defconfig asano.config vendor/xiaomi/spes.config
+  CLANG_VERSION: r596125
+  ARCH: arm64
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison build-essential curl flex git libelf-dev libssl-dev \
+            python3 zip make
+
+      - name: Download Toolchains
+        run: |
+          mkdir -p toolchains/clang toolchains/gcc-64 toolchains/gcc-32
+
+          curl -sSL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/mirror-goog-main-llvm-toolchain-source/clang-${{ env.CLANG_VERSION }}.tar.gz" | tar -xz -C toolchains/clang
+          curl -sSL "https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/tags/android-12.1.0_r27.tar.gz" | tar -xz -C toolchains/gcc-64
+          curl -sSL "https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/tags/android-12.1.0_r27.tar.gz" | tar -xz -C toolchains/gcc-32
+
+          for tc in gcc-64 gcc-32; do
+            NESTED_BIN=$(find toolchains/$tc -type d -name "bin" | head -n 1)
+            if [ -n "$NESTED_BIN" ] && [ "$NESTED_BIN" != "toolchains/$tc/bin" ]; then
+              mkdir -p toolchains/$tc/bin
+              mv $NESTED_BIN/* toolchains/$tc/bin/ 2>/dev/null || true
+            fi
+          done
+
+      - name: Clone Kernel Source
+        run: |
+          git clone --depth=1 -b ${{ env.KERNEL_BRANCH }} ${{ env.KERNEL_URL }} kernel
+
+      - name: Setup KernelSU & NoMount
+        run: |
+          cd kernel
+          curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -
+          curl -LSs "https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/master/kernel/setup.sh" | bash -
+
+      - name: Build Kernel
+        run: |
+          cd kernel
+          export PATH="$GITHUB_WORKSPACE/toolchains/clang/bin:$GITHUB_WORKSPACE/toolchains/gcc-64/bin:$GITHUB_WORKSPACE/toolchains/gcc-32/bin:$PATH"
+
+          make -j$(nproc --all) \
+            O=out \
+            ARCH=${{ env.ARCH }} \
+            CC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-android- \
+            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
+            ${{ env.CONFIGS }} \
+            all \
+            KCFLAGS="-Wno-error -Wno-error=implicit-function-declaration" \
+            CONFIG_CC_WERROR=n
+
+      - name: Package with AnyKernel3
+        run: |
+          git clone --depth=1 ${{ env.ANYKERNEL3_URL }} AnyKernel3
+          cd AnyKernel3
+
+          rm -rf .git .github .gitattributes .gitignore README.md modules patch ramdisk
+
+          cp ../kernel/out/arch/${{ env.ARCH }}/boot/Image.gz ./ 2>/dev/null || cp ../kernel/out/arch/${{ env.ARCH }}/boot/Image ./
+          [ -f ../kernel/out/arch/${{ env.ARCH }}/boot/dtbo.img ] && cp ../kernel/out/arch/${{ env.ARCH }}/boot/dtbo.img ./
+          [ -f ../kernel/out/arch/${{ env.ARCH }}/boot/dtb ] && cp ../kernel/out/arch/${{ env.ARCH }}/boot/dtb ./
+          [ -f ../kernel/out/arch/${{ env.ARCH }}/boot/dtb.img ] && cp ../kernel/out/arch/${{ env.ARCH }}/boot/dtb.img ./
+
+      - name: Set Artifact Timestamp
+        id: meta
+        run: |
+          echo "BUILD_TIME=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+
+      - name: Upload Flashable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KSU-Asano-spes-${{ steps.meta.outputs.BUILD_TIME }}
+          path: AnyKernel3/
