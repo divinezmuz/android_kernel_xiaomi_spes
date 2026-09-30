@@ -24,42 +24,28 @@ jobs:
 
       - name: Download Toolchains
         run: |
-          mkdir -p toolchains/clang toolchains/gcc-64 toolchains/gcc-32
-
-          curl -sSL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/mirror-goog-main-llvm-toolchain-source/clang-${{ env.CLANG_VERSION }}.tar.gz" | tar -xz -C toolchains/clang
-          curl -sSL "https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/tags/android-12.1.0_r27.tar.gz" | tar -xz -C toolchains/gcc-64
-          curl -sSL "https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/tags/android-12.1.0_r27.tar.gz" | tar -xz -C toolchains/gcc-32
-
-          for tc in gcc-64 gcc-32; do
-            NESTED_BIN=$(find toolchains/$tc -type d -name "bin" | head -n 1)
-            if [ -n "$NESTED_BIN" ] && [ "$NESTED_BIN" != "toolchains/$tc/bin" ]; then
-              mkdir -p toolchains/$tc/bin
-              mv $NESTED_BIN/* toolchains/$tc/bin/ 2>/dev/null || true
-            fi
-          done
+          mkdir -p toolchains/clang
+          curl -fsSL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/mirror-goog-main-llvm-toolchain-source/clang-${{ env.CLANG_VERSION }}.tar.gz" | tar -xz -C toolchains/clang
 
       - name: Clone Kernel Source
         run: |
           git clone --depth=1 -b ${{ env.KERNEL_BRANCH }} ${{ env.KERNEL_URL }} kernel
 
-      - name: Setup KernelSU & NoMount
+      - name: Setup KernelSU
         run: |
           cd kernel
-          curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -
-          curl -LSs "https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/master/kernel/setup.sh" | bash -
+          curl -fsSL "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -
 
       - name: Build Kernel
         run: |
           cd kernel
-          export PATH="$GITHUB_WORKSPACE/toolchains/clang/bin:$GITHUB_WORKSPACE/toolchains/gcc-64/bin:$GITHUB_WORKSPACE/toolchains/gcc-32/bin:$PATH"
+          export PATH="$GITHUB_WORKSPACE/toolchains/clang/bin:$PATH"
 
           make -j$(nproc --all) \
             O=out \
             ARCH=${{ env.ARCH }} \
-            CC=clang \
-            CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-android- \
-            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
+            LLVM=1 \
+            LLVM_IAS=1 \
             ${{ env.CONFIGS }} \
             all \
             KCFLAGS="-Wno-error -Wno-error=implicit-function-declaration" \
